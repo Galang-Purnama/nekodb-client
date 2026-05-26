@@ -1,0 +1,46 @@
+{
+    "name": "@nekodb/client",
+    "version": "1.0.0",
+    "description": "NekoDB is a lightweight encrypted document database for Node.js, built with real-time WebSocket communication, simple JSON-based storage, and a developer-friendly API. Designed for speed, security, and ease of integration without external database dependencies.",
+    "main": "index.js",
+    "exports": {
+        ".": "./index.js"
+    },
+    "keywords": [
+        "database",
+        "nosql",
+        "document-database",
+        "encrypted-database",
+        "realtime-database",
+        "websocket",
+        "json-database",
+        "lightweight",
+        "nodejs",
+        "nekodb"
+    ],
+    "author": "Galang Purnama",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/Galang-Purnama/nekodb-client.git"
+    },
+    "bugs": {
+        "url": "https://github.com/Galang-Purnama/nekodb-client/issues"
+    },
+    "homepage": "https://github.com/Galang-Purnama/nekodb-client",
+    "dependencies": {
+        "ws": "^8.16.0"
+    },
+    "files": [
+        "index.js",
+        "auth/",
+        "middleware/",
+        "query/",
+        "schema/",
+        "events/",
+        "helpers/",
+        "connection/",
+        "errors/",
+        "README.md"
+    ]
+}
