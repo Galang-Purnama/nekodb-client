@@ -74,6 +74,17 @@ class NekoDB {
         });
 
         this.#ws.on('message', (msg) => {
+            const raw = msg.toString();
+            if (raw.trim().startsWith('{')) {
+                try {
+                    const parsed = JSON.parse(raw);
+                    if (parsed.event && parsed.collection) {
+                        this.#emit(`${parsed.collection}:${parsed.event}`, parsed);
+                        this.#emit('change', parsed);
+                        return;
+                    }
+                } catch (e) {}
+            }
             this.#buffer.append(msg);
         });
 
@@ -154,11 +165,12 @@ class NekoDB {
     get connected() { return this.#connected; }
     get ready() { return this.#connectedPromise; }
 
-    insert(collection, data) {
+    insert(collection, data, transactionId) {
         this.#cache.invalidatePrefix(`list:${collection}`);
         this.#cache.invalidatePrefix(`count:${collection}`);
         this.#log.debug('insert', collection);
-        return this.#request('insert', collection, data);
+        const query = transactionId ? { transaction_id: transactionId } : null;
+        return this.#request('insert', collection, data, null, query);
     }
 
     get(collection, id) {
@@ -188,19 +200,21 @@ class NekoDB {
         return this.#request('search', collection, null, null, query);
     }
 
-    update(collection, id, data) {
+    update(collection, id, data, transactionId) {
         this.#cache.invalidate(`get:${collection}:${id}`);
         this.#cache.invalidatePrefix(`list:${collection}`);
         this.#log.debug('update', collection, id);
-        return this.#request('update', collection, data, id);
+        const query = transactionId ? { transaction_id: transactionId } : null;
+        return this.#request('update', collection, data, id, query);
     }
 
-    delete(collection, id) {
+    delete(collection, id, transactionId) {
         this.#cache.invalidate(`get:${collection}:${id}`);
         this.#cache.invalidatePrefix(`list:${collection}`);
         this.#cache.invalidatePrefix(`count:${collection}`);
         this.#log.debug('delete', collection, id);
-        return this.#request('delete', collection, null, id);
+        const query = transactionId ? { transaction_id: transactionId } : null;
+        return this.#request('delete', collection, null, id, query);
     }
 
     count(collection) {
@@ -286,6 +300,41 @@ class NekoDB {
 
     listIndexes(collection) {
         return this.#request('list-indexes', collection);
+    }
+
+    registerSchema(collection, schemaConfig) {
+        return this.#request('register-schema', collection, schemaConfig);
+    }
+
+    createSnapshot() {
+        return this.#request('snapshot-create');
+    }
+
+    restoreSnapshot(filename) {
+        return this.#request('snapshot-restore', null, { filename });
+    }
+
+    subscribe(collection, handler) {
+        this.on(`${collection}:insert`, handler);
+        this.on(`${collection}:update`, handler);
+        this.on(`${collection}:delete`, handler);
+        return this.#request('subscribe', collection);
+    }
+
+    async beginTransaction() {
+        const res = await this.#request('transaction-begin');
+        if (typeof res === 'string' && res.startsWith('transaction-started: ')) {
+            return res.split('transaction-started: ')[1].trim();
+        }
+        return res;
+    }
+
+    commitTransaction(transactionId) {
+        return this.#request('transaction-commit', null, { transaction_id: transactionId });
+    }
+
+    rollbackTransaction(transactionId) {
+        return this.#request('transaction-rollback', null, { transaction_id: transactionId });
     }
 
     queueInsert(collection, data) {

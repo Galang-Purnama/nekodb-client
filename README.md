@@ -394,6 +394,72 @@ await db.createIndex('products', 'price', 'sorted');
 const indexes = await db.listIndexes('users');
 ```
 
+## Server-Side Schema & Snapshot Management
+
+Expose server-side validation schemas and compressed backup snapshots:
+
+```javascript
+// Register schema to be validated by the server before insert/update
+await db.registerSchema('users', {
+    fields: {
+        name: 'string',
+        age: 'number',
+        verified: 'boolean',
+    },
+    required: ['name', 'verified'],
+});
+
+// Trigger a compressed .nkdb snapshot backup to local disk
+const filename = await db.createSnapshot();
+// returns: "backup_Username_1779752707.nkdb"
+
+// Restore the database state from a specified .nkdb archive
+await db.restoreSnapshot(filename);
+```
+
+## Pub/Sub Reactive Channels
+
+Subscribe to real-time change events on collections:
+
+```javascript
+// Subscribe to real-time events on 'messages' collection
+await db.subscribe('messages', (event) => {
+    console.log(`Real-time change: ${event.event} on document ${event.document_id}`);
+    if (event.document) {
+        console.log('Document content:', event.document);
+    }
+});
+
+// Broadcast events: Any other client inserting/updating/deleting in 'messages' 
+// will trigger the above callback in sub-millisecond real-time!
+```
+
+## Multi-Document ACID Transactions
+
+Perform atomic multi-document writes with staging and rollbacks:
+
+```javascript
+// Start a new ACID transaction session
+const txId = await db.beginTransaction();
+
+try {
+    // Stage insert operations inside the transaction
+    const id1 = await db.insert('users', { name: 'Alice' }, txId);
+    const id2 = await db.insert('users', { name: 'Bob' }, txId);
+    
+    // Stage updates inside the transaction
+    await db.update('users', id1, { verified: true }, txId);
+    
+    // Atomically commit all staged changes to the database
+    await db.commitTransaction(txId);
+    console.log('Transaction committed successfully!');
+} catch (err) {
+    // Roll back the entire transaction if any error occurs
+    await db.rollbackTransaction(txId);
+    console.error('Transaction failed and rolled back:', err.message);
+}
+```
+
 ## Error Handling
 
 Typed error classes for structured error handling:
