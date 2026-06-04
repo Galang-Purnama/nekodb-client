@@ -1,6 +1,6 @@
 {
     "name": "@nekodb/client",
-    "version": "1.0.1",
+    "version": "1.0.2",
     "description": "NekoDB is a lightweight encrypted document database for Node.js, built with real-time WebSocket communication, simple JSON-based storage, and a developer-friendly API. Designed for speed, security, and ease of integration without external database dependencies.",
     "main": "index.js",
     "exports": {

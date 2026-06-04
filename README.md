@@ -17,7 +17,6 @@ const db = new NekoDB({
     host: 'your-server.com',
     username: 'Username',
     password: 'Password',
-    // key: 'Key', // Optional: automatically derived as SHA-256 of username
 });
 
 const id = await db.insert('users', { name: 'Neko', age: 5 });
@@ -53,10 +52,9 @@ const db = new NekoDB({
     host: 'your-server.com',
     username: 'your_username',
     password: 'your_password',
-    // key: 'your_key', // Optional: automatically derived as SHA-256 of username
 });
 
-// From environment variables (NEKODB_HOST, NEKODB_USERNAME, NEKODB_PASSWORD, NEKODB_KEY)
+// From environment variables (NEKODB_HOST, NEKODB_USERNAME, NEKODB_PASSWORD)
 const db = NekoDB.fromEnv();
 ```
 
@@ -566,7 +564,6 @@ async function main() {
         host: 'your-server.com',
         username: 'Username',
         password: 'Password',
-        // key: 'Key', // Optional: automatically derived as SHA-256 of username
     });
 
     db.on('connected', () => console.log('✅ Connected'));

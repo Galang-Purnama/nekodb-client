@@ -1,27 +1,16 @@
-const { sha256 } = require('./key-derivation');
-
 class AuthManager {
     #username;
     #password;
-    #key;
 
-    constructor(username, password, key) {
+    constructor(username, password) {
         this.#username = username || '';
         this.#password = password || '';
-        if (key) {
-            this.#key = key;
-        } else if (this.#username) {
-            this.#key = sha256(this.#username);
-        } else {
-            this.#key = '';
-        }
     }
 
     getCredentials() {
         return {
             username: this.#username,
             password: this.#password,
-            key: this.#key,
         };
     }
 

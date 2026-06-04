@@ -25,9 +25,9 @@ class NekoDB {
     #connected;
     #events;
 
-    constructor({ host, username, password, key, cache, logging }) {
+    constructor({ host, username, password, cache, logging }) {
         this.#host = host;
-        this.#auth = new AuthManager(username, password, key);
+        this.#auth = new AuthManager(username, password);
         this.#ws = null;
         this.#buffer = new BufferManager();
         this.#reconnect = new ReconnectManager();
@@ -388,7 +388,6 @@ class NekoDB {
             host: host || process.env.NEKODB_HOST,
             username: process.env.NEKODB_USERNAME,
             password: process.env.NEKODB_PASSWORD,
-            key: process.env.NEKODB_KEY,
         });
     }
 }
