@@ -122,6 +122,50 @@ await db.search('products', { price: { $gte: 100, $lte: 1000 } });
 await db.search('products', { category: { $in: ['electronics', 'software'] } });
 ```
 
+### Vector Search
+
+Search documents by vector/embedding similarity using Cosine Similarity or Euclidean (L2) Distance:
+
+```javascript
+// From NekoDB instance
+const results = await db.vectorSearch('products', {
+    field: 'embedding',
+    vector: [0.12, 0.43, -0.91],
+    metric: 'cosine', // 'cosine' or 'l2' (euclidean)
+    topK: 5
+});
+
+// From Collection instance
+const products = db.collection('products');
+const results = await products.vectorSearch({
+    field: 'embedding',
+    vector: [0.12, 0.43, -0.91],
+    metric: 'l2',
+    topK: 3
+});
+```
+
+### Full-Text Search (FTS)
+
+Search documents by textual relevance using the BM25 scoring algorithm:
+
+```javascript
+// From NekoDB instance
+const results = await db.ftsSearch('articles', {
+    field: 'content',
+    query: 'belajar go database',
+    limit: 10
+});
+
+// From Collection instance
+const articles = db.collection('articles');
+const results = await articles.ftsSearch({
+    field: 'content',
+    query: 'belajar go database',
+    limit: 5
+});
+```
+
 ### Update
 
 ```javascript

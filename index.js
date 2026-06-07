@@ -200,6 +200,23 @@ class NekoDB {
         return this.#request('search', collection, null, null, query);
     }
 
+    vectorSearch(collection, { field, vector, metric = 'cosine', topK = 5 } = {}) {
+        return this.#request('vector-search', collection, {
+            field,
+            vector,
+            metric,
+            top_k: topK
+        });
+    }
+
+    ftsSearch(collection, { field, query, limit = 10 } = {}) {
+        return this.#request('fts-search', collection, {
+            field,
+            query,
+            limit
+        });
+    }
+
     update(collection, id, data, transactionId) {
         this.#cache.invalidate(`get:${collection}:${id}`);
         this.#cache.invalidatePrefix(`list:${collection}`);
@@ -407,6 +424,8 @@ class Collection {
     get(id) { return this.#db.get(this.#name, id); }
     list() { return this.#db.list(this.#name); }
     search(query) { return this.#db.search(this.#name, query); }
+    vectorSearch(options) { return this.#db.vectorSearch(this.#name, options); }
+    ftsSearch(options) { return this.#db.ftsSearch(this.#name, options); }
     update(id, data) { return this.#db.update(this.#name, id, data); }
     delete(id) { return this.#db.delete(this.#name, id); }
     count() { return this.#db.count(this.#name); }
