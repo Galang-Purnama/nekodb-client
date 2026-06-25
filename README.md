@@ -459,6 +459,37 @@ const filename = await db.createSnapshot();
 await db.restoreSnapshot(filename);
 ```
 
+## Data Export and File Download
+
+Export documents into formatted CSV or JSON files, and download the resulting archives. Both `collection` and `doc_id` are **required** parameters. Exported files expire after **5 minutes**.
+
+```javascript
+// Export a document to CSV (both collection and doc_id are required)
+const result = await db.exportCSV('users', 'c4752fbd433b9daae49ea09a4b490f7f');
+// returns: { format: 'csv', file_path: '...', filename: 'users_c4752fbd..._1779752707.csv',
+//            expires_at: '2026-06-25T15:05:00Z', ... }
+
+// Export a document to JSON
+const resultJson = await db.exportJSON('users', 'c4752fbd433b9daae49ea09a4b490f7f');
+
+// Download the exported file using the filename (must download within 5 minutes)
+const filename = result.filename;
+await db.downloadExport(filename, './downloaded_users.csv');
+console.log('File successfully downloaded!');
+```
+
+You can also export directly from a `Collection` instance:
+
+```javascript
+const users = db.collection('users');
+
+// Export document to CSV (doc_id is required)
+const csvRes = await users.exportCSV('c4752fbd433b9daae49ea09a4b490f7f');
+
+// Export document to JSON (doc_id is required)
+const jsonRes = await users.exportJSON('c4752fbd433b9daae49ea09a4b490f7f');
+```
+
 ## Pub/Sub Reactive Channels
 
 Subscribe to real-time change events on collections:

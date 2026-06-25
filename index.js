@@ -1,4 +1,6 @@
 const WebSocket = require('ws');
+const http = require('http');
+const fs = require('fs');
 const { AuthManager } = require('./auth');
 const { BufferManager, PingManager, ReconnectManager, ResponseCache, BatchCollector, Logger } = require('./middleware');
 const { QueryBuilder } = require('./query');
@@ -149,6 +151,90 @@ class NekoDB {
         if (documentId) payload.document_id = documentId;
         if (query) payload.query = query;
         return this.#send(payload);
+    }
+
+    #httpGet(path, params) {
+        return new Promise((resolve, reject) => {
+            const hostParts = this.#host.split(':');
+            const hostname = hostParts[0];
+            const port = hostParts[1] ? parseInt(hostParts[1], 10) : 80;
+
+            const query = Object.entries(params)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                .join('&');
+
+            const options = {
+                hostname,
+                port,
+                path: `${path}?${query}`,
+                method: 'GET'
+            };
+
+            const req = http.request(options, (res) => {
+                let data = '';
+                res.on('data', (chunk) => data += chunk);
+                res.on('end', () => {
+                    if (res.statusCode >= 400) {
+                        reject(new Error(`HTTP Error ${res.statusCode}: ${data}`));
+                    } else {
+                        try {
+                            resolve(JSON.parse(data));
+                        } catch (e) {
+                            resolve(data);
+                        }
+                    }
+                });
+            });
+
+            req.on('error', (err) => reject(err));
+            req.end();
+        });
+    }
+
+    #httpDownload(path, params, outputPath) {
+        return new Promise((resolve, reject) => {
+            const hostParts = this.#host.split(':');
+            const hostname = hostParts[0];
+            const port = hostParts[1] ? parseInt(hostParts[1], 10) : 80;
+
+            const query = Object.entries(params)
+                .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+                .join('&');
+
+            const options = {
+                hostname,
+                port,
+                path: `${path}?${query}`,
+                method: 'GET'
+            };
+
+            const req = http.request(options, (res) => {
+                if (res.statusCode >= 400) {
+                    let data = '';
+                    res.on('data', (chunk) => data += chunk);
+                    res.on('end', () => {
+                        reject(new Error(`HTTP Error ${res.statusCode}: ${data}`));
+                    });
+                    return;
+                }
+
+                const fileStream = fs.createWriteStream(outputPath);
+                res.pipe(fileStream);
+
+                fileStream.on('finish', () => {
+                    fileStream.close();
+                    resolve(outputPath);
+                });
+
+                fileStream.on('error', (err) => {
+                    fs.unlink(outputPath, () => {});
+                    reject(err);
+                });
+            });
+
+            req.on('error', (err) => reject(err));
+            req.end();
+        });
     }
 
     on(event, handler) {
@@ -374,6 +460,33 @@ class NekoDB {
         this.#cache.clear();
     }
 
+    exportCSV(collection, docId) {
+        if (!collection) throw new Error('missing required parameter: collection');
+        if (!docId) throw new Error('missing required parameter: doc_id');
+        return this.#httpGet('/api/export/csv', {
+            user: this.#auth.getCredentials().username,
+            collection,
+            doc_id: docId
+        });
+    }
+
+    exportJSON(collection, docId) {
+        if (!collection) throw new Error('missing required parameter: collection');
+        if (!docId) throw new Error('missing required parameter: doc_id');
+        return this.#httpGet('/api/export/json', {
+            user: this.#auth.getCredentials().username,
+            collection,
+            doc_id: docId
+        });
+    }
+
+    downloadExport(filename, outputPath) {
+        return this.#httpDownload('/api/export/download', {
+            user: this.#auth.getCredentials().username,
+            filename
+        }, outputPath);
+    }
+
     collection(name) {
         return new Collection(this, name);
     }
@@ -443,6 +556,14 @@ class Collection {
     queueInsert(data) { this.#db.queueInsert(this.#name, data); }
     queueUpdate(id, data) { this.#db.queueUpdate(this.#name, id, data); }
     queueDelete(id) { this.#db.queueDelete(this.#name, id); }
+    exportCSV(docId) {
+        if (!docId) throw new Error('missing required parameter: doc_id');
+        return this.#db.exportCSV(this.#name, docId);
+    }
+    exportJSON(docId) {
+        if (!docId) throw new Error('missing required parameter: doc_id');
+        return this.#db.exportJSON(this.#name, docId);
+    }
     query() { return new QueryBuilder(this.#db, this.#name); }
     helper() { return new CollectionHelper(this.#db, this.#name); }
 }
