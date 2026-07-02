@@ -1,10 +1,10 @@
 class PingManager {
-    #ws;
+    #pingFn;
     #interval;
     #timer;
 
-    constructor(ws, interval = 25000) {
-        this.#ws = ws;
+    constructor(pingFn, interval = 25000) {
+        this.#pingFn = pingFn;
         this.#interval = interval;
         this.#timer = null;
     }
@@ -12,9 +12,7 @@ class PingManager {
     start() {
         if (this.#timer) return;
         this.#timer = setInterval(() => {
-            if (this.#ws && this.#ws.readyState === 1) {
-                try { this.#ws.ping(); } catch { }
-            }
+            try { this.#pingFn(); } catch { }
         }, this.#interval);
     }
 

@@ -9,6 +9,56 @@ class ConnectionManager {
         this.#activeId = null;
         this.#healthChecks = new Map();
         this.#maxConnections = maxConnections;
+
+        return new Proxy(this, {
+            get: (target, prop, receiver) => {
+                if (Reflect.has(target, prop)) {
+                    const value = Reflect.get(target, prop, receiver);
+                    if (typeof value === 'function') {
+                        return value.bind(target);
+                    }
+                    return value;
+                }
+
+                if (prop === 'collection') {
+                    const { Collection } = require('../index');
+                    return (name) => new Collection(receiver, name);
+                }
+                if (prop === 'helper') {
+                    const { CollectionHelper } = require('../index');
+                    return (name) => new CollectionHelper(receiver, name);
+                }
+                if (prop === 'query') {
+                    const { QueryBuilder } = require('../index');
+                    return (colName) => new QueryBuilder(receiver, colName);
+                }
+
+                const activeDb = target.active();
+                if (activeDb) {
+                    if (typeof activeDb[prop] === 'function') {
+                        return async (...args) => {
+                            try {
+                                return await activeDb[prop].apply(activeDb, args);
+                            } catch (err) {
+                                if (!activeDb.connected || err.message.includes('timeout') || err.message.includes('closed') || err.message.includes('WebSocket')) {
+                                    const switched = target.switchToHealthy();
+                                    if (switched) {
+                                        const newActiveDb = target.active();
+                                        if (newActiveDb && typeof newActiveDb[prop] === 'function') {
+                                            return await newActiveDb[prop].apply(newActiveDb, args);
+                                        }
+                                    }
+                                }
+                                throw err;
+                            }
+                        };
+                    }
+                    return activeDb[prop];
+                }
+
+                return undefined;
+            }
+        });
     }
 
     add(id, nekoDBInstance) {

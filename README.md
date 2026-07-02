@@ -466,8 +466,8 @@ Export documents into formatted CSV or JSON files, and download the resulting ar
 ```javascript
 // Export a document to CSV (both collection and doc_id are required)
 const result = await db.exportCSV('users', 'c4752fbd433b9daae49ea09a4b490f7f');
-// returns: { format: 'csv', file_path: '...', filename: 'users_c4752fbd..._1779752707.csv',
-//            expires_at: '2026-06-25T15:05:00Z', ... }
+// returns: { format: 'csv', filename: 'users_c4752fbd..._1779752707.csv',
+//            document_count: 1, file_size: 572, exported_at: '...', expires_at: '2026-06-25T15:05:00Z' }
 
 // Export a document to JSON
 const resultJson = await db.exportJSON('users', 'c4752fbd433b9daae49ea09a4b490f7f');
@@ -488,6 +488,20 @@ const csvRes = await users.exportCSV('c4752fbd433b9daae49ea09a4b490f7f');
 
 // Export document to JSON (doc_id is required)
 const jsonRes = await users.exportJSON('c4752fbd433b9daae49ea09a4b490f7f');
+```
+
+## Observability and Health Checks
+
+NekoDB provides simple utility methods to programmatically retrieve database performance metrics and health status directly from the server:
+
+```javascript
+// Get database performance metrics (latencies, operations count, errors)
+const metrics = await db.getMetrics();
+console.log('Average Write Latency:', metrics.write_latency_ms);
+
+// Get server health status (uptime, storage failures, active alerts)
+const health = await db.getHealth();
+console.log('Database Status:', health.status); // e.g., "healthy"
 ```
 
 ## Pub/Sub Reactive Channels
@@ -584,17 +598,9 @@ bus.once('db:ready', () => console.log('Database ready'));
 const handler = (data) => console.log(data);
 bus.on('test', handler);
 bus.off('test', handler);
-
-// Wait for event (promise-based)
-const data = await bus.waitFor('user:created', 5000); // 5s timeout
-
-// Emit
-bus.emit('user:created', { name: 'Neko' });
-```
-
 ## Connection Manager
 
-Manage multiple NekoDB connections:
+Manage multiple NekoDB connections with built-in auto-failover query routing (Proxy):
 
 ```javascript
 const { ConnectionManager } = require('@nekodb/client');
@@ -605,11 +611,17 @@ const manager = new ConnectionManager();
 manager.add('primary', new NekoDB({ host: 'server1.com', ... }));
 manager.add('secondary', new NekoDB({ host: 'server2.com', ... }));
 
-// Use active connection
-const db = manager.active();
-await db.insert('logs', { event: 'test' });
+// 🌟 Smart Auto-Failover Proxy Routing:
+// You can invoke database queries and helper methods directly on the manager.
+// If the active node fails or goes offline, the manager automatically performs
+// a failover (switches active node to a healthy one) and retries the operation transparently!
+const id = await manager.insert('users', { name: 'Neko' });
 
-// Switch active connection
+// Works seamlessly with collection helper API too:
+const users = manager.collection('users');
+await users.insert({ name: 'Alice' });
+
+// Switch active connection manually
 manager.setActive('secondary');
 
 // Health management

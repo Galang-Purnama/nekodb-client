@@ -1,5 +1,6 @@
 const WebSocket = require('ws');
 const http = require('http');
+const https = require('https');
 const fs = require('fs');
 const { AuthManager } = require('./auth');
 const { BufferManager, PingManager, ReconnectManager, ResponseCache, BatchCollector, Logger } = require('./middleware');
@@ -26,9 +27,18 @@ class NekoDB {
     #shouldReconnect;
     #connected;
     #events;
+    #hostClean;
 
     constructor({ host, username, password, cache, logging }) {
         this.#host = host;
+        let clean = host;
+        if (clean.startsWith('wss://')) {
+            clean = clean.slice(6);
+        } else if (clean.startsWith('https://')) {
+            clean = clean.slice(8);
+        }
+        this.#hostClean = clean;
+
         this.#auth = new AuthManager(username, password);
         this.#ws = null;
         this.#buffer = new BufferManager();
@@ -51,7 +61,7 @@ class NekoDB {
 
     #init() {
         try {
-            this.#ws = new WebSocket(`ws://${this.#host}`);
+            this.#ws = new WebSocket(`wss://${this.#hostClean}`);
         } catch (err) {
             this.#log.error('Connection failed:', err.message);
             if (this.#rejectConnected) this.#rejectConnected(err);
@@ -67,7 +77,17 @@ class NekoDB {
             this.#connected = true;
             this.#reconnect.reset();
 
-            this.#ping = new PingManager(this.#ws);
+            this.#ping = new PingManager(() => {
+                if (this.#ws && this.#ws.readyState === WebSocket.OPEN) {
+                    try {
+                        const payload = {
+                            auth: this.#auth.getCredentials(),
+                            action: 'ping'
+                        };
+                        this.#ws.send(Buffer.from(JSON.stringify(payload)));
+                    } catch (e) {}
+                }
+            });
             this.#ping.start();
 
             this.#log.info('Connected to', this.#host);
@@ -77,9 +97,15 @@ class NekoDB {
 
         this.#ws.on('message', (msg) => {
             const raw = msg.toString();
+            if (raw.trim() === 'pong') {
+                return;
+            }
             if (raw.trim().startsWith('{')) {
                 try {
                     const parsed = JSON.parse(raw);
+                    if (parsed.action === 'ping' || parsed.event === 'pong') {
+                        return;
+                    }
                     if (parsed.event && parsed.collection) {
                         this.#emit(`${parsed.collection}:${parsed.event}`, parsed);
                         this.#emit('change', parsed);
@@ -155,9 +181,11 @@ class NekoDB {
 
     #httpGet(path, params) {
         return new Promise((resolve, reject) => {
-            const hostParts = this.#host.split(':');
+            const client = https;
+            const defaultPort = 443;
+            const hostParts = this.#hostClean.split(':');
             const hostname = hostParts[0];
-            const port = hostParts[1] ? parseInt(hostParts[1], 10) : 80;
+            const port = hostParts[1] ? parseInt(hostParts[1], 10) : defaultPort;
 
             const query = Object.entries(params)
                 .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
@@ -170,7 +198,7 @@ class NekoDB {
                 method: 'GET'
             };
 
-            const req = http.request(options, (res) => {
+            const req = client.request(options, (res) => {
                 let data = '';
                 res.on('data', (chunk) => data += chunk);
                 res.on('end', () => {
@@ -193,9 +221,11 @@ class NekoDB {
 
     #httpDownload(path, params, outputPath) {
         return new Promise((resolve, reject) => {
-            const hostParts = this.#host.split(':');
+            const client = https;
+            const defaultPort = 443;
+            const hostParts = this.#hostClean.split(':');
             const hostname = hostParts[0];
-            const port = hostParts[1] ? parseInt(hostParts[1], 10) : 80;
+            const port = hostParts[1] ? parseInt(hostParts[1], 10) : defaultPort;
 
             const query = Object.entries(params)
                 .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
@@ -208,7 +238,7 @@ class NekoDB {
                 method: 'GET'
             };
 
-            const req = http.request(options, (res) => {
+            const req = client.request(options, (res) => {
                 if (res.statusCode >= 400) {
                     let data = '';
                     res.on('data', (chunk) => data += chunk);
@@ -485,6 +515,14 @@ class NekoDB {
             user: this.#auth.getCredentials().username,
             filename
         }, outputPath);
+    }
+
+    getMetrics() {
+        return this.#httpGet('/api/metrics', {});
+    }
+
+    getHealth() {
+        return this.#httpGet('/api/health', {});
     }
 
     collection(name) {
