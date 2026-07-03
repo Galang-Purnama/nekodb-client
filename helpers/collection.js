@@ -27,29 +27,15 @@ class CollectionHelper {
     }
 
     async findMany(query) {
-        const ids = await this.#db.search(this.#collection, query);
-        if (!Array.isArray(ids)) return [];
-        const docs = [];
-        for (const id of ids) {
-            const doc = await this.#db.get(this.#collection, id);
-            if (doc && doc !== 'not-found') {
-                docs.push({ _id: id, ...doc });
-            }
+        const res = await this.#db.searchProjected(this.#collection, query || {}, null);
+        if (typeof res === 'string') {
+            return [];
         }
-        return docs;
+        return Array.isArray(res) ? res : [];
     }
 
     async getAll() {
-        const ids = await this.#db.list(this.#collection);
-        if (!Array.isArray(ids)) return [];
-        const docs = [];
-        for (const id of ids) {
-            const doc = await this.#db.get(this.#collection, id);
-            if (doc && doc !== 'not-found') {
-                docs.push({ _id: id, ...doc });
-            }
-        }
-        return docs;
+        return this.findMany({});
     }
 
     async upsert(query, data) {

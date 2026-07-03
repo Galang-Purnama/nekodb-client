@@ -52,6 +52,9 @@ const db = new NekoDB({
     host: 'your-server.com',
     username: 'your_username',
     password: 'your_password',
+    // Options: 'none', 'debug', 'info', 'warn', 'error'
+    // Or pass a custom logger object like winston/pino (must implement debug, info, warn, error)
+    logging: 'info', 
 });
 
 // From environment variables (NEKODB_HOST, NEKODB_USERNAME, NEKODB_PASSWORD)
@@ -264,9 +267,11 @@ const user = await users.findById('doc-id');
 const exists = await users.exists('doc-id');
 
 // Find all matching documents (returns full docs, not just IDs)
+// ⚡ Optimized: Fetches all matching documents in exactly 1 WebSocket roundtrip!
 const admins = await users.findMany({ role: 'admin' });
 
 // Get all documents in collection
+// ⚡ Optimized: Fetches all documents in exactly 1 WebSocket roundtrip!
 const allUsers = await users.getAll();
 
 // Upsert: update if exists, insert if not
@@ -598,6 +603,8 @@ bus.once('db:ready', () => console.log('Database ready'));
 const handler = (data) => console.log(data);
 bus.on('test', handler);
 bus.off('test', handler);
+```
+
 ## Connection Manager
 
 Manage multiple NekoDB connections with built-in auto-failover query routing (Proxy):
