@@ -74,6 +74,7 @@ export class Collection {
     exportJSON(docId: string): Promise<any>;
     query(): QueryBuilder;
     helper(): CollectionHelper;
+    watch<T = any>(query: object, callback: (docs: T[]) => void): { close(): void };
 }
 
 export class NekoDB {
@@ -107,6 +108,16 @@ export class NekoDB {
     createSnapshot(): Promise<any>;
     restoreSnapshot(filename: string): Promise<any>;
     subscribe(collection: string, handler: (event: any) => void): Promise<any>;
+    watch<T = any>(
+        collection: string,
+        query: object,
+        callback: (docs: T[]) => void,
+        options?: {
+            sort?: { field: string; order?: 'asc' | 'desc' }[];
+            limit?: number;
+            projection?: object;
+        }
+    ): { close(): void };
     beginTransaction(): Promise<string>;
     commitTransaction(transactionId: string): Promise<any>;
     rollbackTransaction(transactionId: string): Promise<any>;
@@ -157,6 +168,7 @@ export class QueryBuilder {
     exec<T = any>(): Promise<T>;
     count(): Promise<number>;
     first<T = any>(): Promise<T | null>;
+    watch<T = any>(callback: (docs: T[]) => void): { close(): void };
 }
 
 export class FieldQuery {
@@ -196,6 +208,9 @@ export class CollectionHelper {
     deleteById(id: string): Promise<string>;
     count(query?: object): Promise<number>;
     upsert(query: object, data: object): Promise<any>;
+    updatePath(id: string, path: string, value: any): Promise<string>;
+    pushToArray(id: string, path: string, value: any): Promise<string>;
+    pullFromArray(id: string, path: string, value: any): Promise<string>;
 }
 
 export class ConnectionManager {

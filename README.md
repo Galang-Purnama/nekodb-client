@@ -348,6 +348,15 @@ await users.forEach({ role: 'admin' }, (user, i) => {
 
 const names = await users.map({ role: 'admin' }, u => u.name);
 const seniors = await users.filter({}, u => u.age > 50);
+
+// Update nested properties (dot-notation)
+await users.updatePath('doc-id', 'profile.avatar', 'new-avatar.png');
+
+// Push item to nested array
+await users.pushToArray('doc-id', 'profile.tags', 'developer');
+
+// Pull item from nested array
+await users.pullFromArray('doc-id', 'profile.tags', 'developer');
 ```
 
 ## Schema Validation

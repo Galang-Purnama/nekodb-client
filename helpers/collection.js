@@ -1,3 +1,5 @@
+const { getNestedValue, setNestedValue } = require('./document');
+
 class CollectionHelper {
     #db;
     #collection;
@@ -131,6 +133,48 @@ class CollectionHelper {
     async filter(query, predicate) {
         const docs = await this.findMany(query);
         return docs.filter(predicate);
+    }
+
+    async updatePath(id, path, value) {
+        const doc = await this.#db.get(this.#collection, id);
+        if (!doc || doc === 'not-found') {
+            throw new Error(`Document not found: ${this.#collection}/${id}`);
+        }
+        const cloned = JSON.parse(JSON.stringify(doc));
+        const updated = setNestedValue(cloned, path, value);
+        return this.#db.update(this.#collection, id, updated);
+    }
+
+    async pushToArray(id, path, value) {
+        const doc = await this.#db.get(this.#collection, id);
+        if (!doc || doc === 'not-found') {
+            throw new Error(`Document not found: ${this.#collection}/${id}`);
+        }
+        const cloned = JSON.parse(JSON.stringify(doc));
+        let arr = getNestedValue(cloned, path);
+        if (!Array.isArray(arr)) {
+            arr = [];
+        } else {
+            arr = [...arr];
+        }
+        arr.push(value);
+        const updated = setNestedValue(cloned, path, arr);
+        return this.#db.update(this.#collection, id, updated);
+    }
+
+    async pullFromArray(id, path, value) {
+        const doc = await this.#db.get(this.#collection, id);
+        if (!doc || doc === 'not-found') {
+            throw new Error(`Document not found: ${this.#collection}/${id}`);
+        }
+        const cloned = JSON.parse(JSON.stringify(doc));
+        const arr = getNestedValue(cloned, path);
+        if (!Array.isArray(arr)) {
+            return this.#db.update(this.#collection, id, cloned);
+        }
+        const updatedArr = arr.filter(item => item !== value);
+        const updated = setNestedValue(cloned, path, updatedArr);
+        return this.#db.update(this.#collection, id, updated);
     }
 }
 

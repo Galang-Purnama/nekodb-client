@@ -181,6 +181,14 @@ class QueryBuilder {
         if (results?.data) return results.data[0] || null;
         return results;
     }
+
+    watch(callback) {
+        return this.#db.watch(this.#collection, this.getQuery(), callback, {
+            projection: this.getProjection(),
+            sort: this.#sortFields,
+            limit: this.#limitVal,
+        });
+    }
 }
 
 module.exports = { QueryBuilder };

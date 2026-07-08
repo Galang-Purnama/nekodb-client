@@ -5,20 +5,14 @@ const fs = require('fs');
 const { AuthManager } = require('./auth');
 const { BufferManager, PingManager, ReconnectManager, ResponseCache, BatchCollector, Logger } = require('./middleware');
 const { QueryBuilder } = require('./query');
+const { matchesQuery, sortDocuments } = require('./query/matcher');
 const { Schema } = require('./schema');
 const { EventBus } = require('./events');
 const { CollectionHelper } = require('./helpers');
 const { ConnectionManager } = require('./connection');
 const errors = require('./errors');
 
-function unwrapDocument(doc) {
-    if (doc && typeof doc === 'object') {
-        if ('content' in doc) {
-            return doc.content;
-        }
-    }
-    return doc;
-}
+
 
 class NekoDB {
     #host;
@@ -96,7 +90,7 @@ class NekoDB {
                             action: 'ping'
                         };
                         this.#ws.send(Buffer.from(JSON.stringify(payload)));
-                    } catch (e) {}
+                    } catch (e) { }
                 }
             });
             this.#ping.start();
@@ -123,7 +117,7 @@ class NekoDB {
                         this.#emit('change', parsed);
                         return;
                     }
-                } catch (e) {}
+                } catch (e) { }
             }
             this.#buffer.append(msg);
         });
@@ -183,7 +177,7 @@ class NekoDB {
             });
         });
 
-        this.#sendQueue = result.catch(() => {});
+        this.#sendQueue = result.catch(() => { });
         return result;
     }
 
@@ -307,7 +301,7 @@ class NekoDB {
                 });
 
                 fileStream.on('error', (err) => {
-                    fs.unlink(outputPath, () => {});
+                    fs.unlink(outputPath, () => { });
                     reject(err);
                 });
             });
@@ -347,9 +341,8 @@ class NekoDB {
             return Promise.resolve(cached);
         }
         return this.#request('get', collection, null, id).then(result => {
-            const processed = unwrapDocument(result);
-            this.#cache.set(cacheKey, processed);
-            return processed;
+            this.#cache.set(cacheKey, result);
+            return result;
         });
     }
 
@@ -427,12 +420,7 @@ class NekoDB {
             page: options.page || 0,
             cursor: options.cursor || '',
             sort: options.sort || [],
-        }, null, options.filter || null).then(result => {
-            if (result && Array.isArray(result.data)) {
-                result.data = result.data.map(unwrapDocument);
-            }
-            return result;
-        });
+        }, null, options.filter || null);
     }
 
     searchPaginated(collection, query, options = {}) {
@@ -440,12 +428,7 @@ class NekoDB {
             limit: options.limit || 20,
             offset: options.offset || 0,
             page: options.page || 0,
-        }, null, query).then(result => {
-            if (result && Array.isArray(result.data)) {
-                result.data = result.data.map(unwrapDocument);
-            }
-            return result;
-        });
+        }, null, query);
     }
 
     aggregate(collection, stages) {
@@ -481,16 +464,11 @@ class NekoDB {
     }
 
     getProjected(collection, id, projection) {
-        return this.#request('get-projected', collection, projection, id).then(unwrapDocument);
+        return this.#request('get-projected', collection, projection, id);
     }
 
     searchProjected(collection, query, projection) {
-        return this.#request('search-projected', collection, projection, null, query).then(results => {
-            if (Array.isArray(results)) {
-                return results.map(unwrapDocument);
-            }
-            return results;
-        });
+        return this.#request('search-projected', collection, projection, null, query);
     }
 
     createIndex(collection, field, type = 'hash') {
@@ -518,6 +496,170 @@ class NekoDB {
         this.on(`${collection}:update`, handler);
         this.on(`${collection}:delete`, handler);
         return this.#request('subscribe', collection);
+    }
+
+    watch(collection, query, callback, options = {}) {
+        const projection = options.projection || null;
+        const sortFields = options.sort || [];
+        const limitVal = options.limit || 0;
+
+        let docs = [];
+        let initialized = false;
+        const queue = [];
+
+        const processEvent = async (eventPayload) => {
+            const { event, document_id, document } = eventPayload;
+
+            if (event === 'insert') {
+                const doc = document || {};
+                const fullDoc = { _id: document_id, ...doc };
+                if (matchesQuery(fullDoc, query)) {
+                    const idx = docs.findIndex(d => d._id === document_id);
+                    if (idx !== -1) {
+                        docs[idx] = fullDoc;
+                    } else {
+                        docs.push(fullDoc);
+                    }
+                    if (sortFields.length > 0) {
+                        docs = sortDocuments(docs, sortFields);
+                    }
+                    if (limitVal > 0) {
+                        docs = docs.slice(0, limitVal);
+                    }
+                    callback(docs);
+                }
+            } else if (event === 'update') {
+                const docDelta = document || {};
+                const idx = docs.findIndex(d => d._id === document_id);
+
+                if (idx !== -1) {
+                    const fullDoc = { ...docs[idx], ...docDelta };
+                    if (matchesQuery(fullDoc, query)) {
+                        docs[idx] = fullDoc;
+                        if (sortFields.length > 0) {
+                            docs = sortDocuments(docs, sortFields);
+                        }
+                        if (limitVal > 0) {
+                            docs = docs.slice(0, limitVal);
+                        }
+                        callback(docs);
+                    } else {
+                        docs.splice(idx, 1);
+                        if (limitVal > 0 && docs.length < limitVal) {
+                            try {
+                                const refreshed = await this.searchProjected(collection, query, projection);
+                                if (Array.isArray(refreshed)) {
+                                    docs = refreshed;
+                                    if (sortFields.length > 0) {
+                                        docs = sortDocuments(docs, sortFields);
+                                    }
+                                    if (limitVal > 0) {
+                                        docs = docs.slice(0, limitVal);
+                                    }
+                                }
+                            } catch (e) {
+                                this.#log.error('Watch auto-replenish failed:', e.message);
+                            }
+                        }
+                        callback(docs);
+                    }
+                } else {
+                    const queryKeys = Object.keys(query || {});
+                    const hasQueryField = queryKeys.length === 0 || Object.keys(docDelta).some(k => queryKeys.includes(k));
+
+                    if (hasQueryField) {
+                        try {
+                            const fullDoc = await this.get(collection, document_id);
+                            if (fullDoc && fullDoc !== 'not-found' && matchesQuery({ _id: document_id, ...fullDoc }, query)) {
+                                docs.push({ _id: document_id, ...fullDoc });
+                                if (sortFields.length > 0) {
+                                    docs = sortDocuments(docs, sortFields);
+                                }
+                                if (limitVal > 0) {
+                                    docs = docs.slice(0, limitVal);
+                                }
+                                callback(docs);
+                            }
+                        } catch (e) {
+                            // ignore
+                        }
+                    }
+                }
+            } else if (event === 'delete') {
+                const idx = docs.findIndex(d => d._id === document_id);
+                if (idx !== -1) {
+                    docs.splice(idx, 1);
+                    if (limitVal > 0 && docs.length < limitVal) {
+                        try {
+                            const refreshed = await this.searchProjected(collection, query, projection);
+                            if (Array.isArray(refreshed)) {
+                                docs = refreshed;
+                                if (sortFields.length > 0) {
+                                    docs = sortDocuments(docs, sortFields);
+                                }
+                                if (limitVal > 0) {
+                                    docs = docs.slice(0, limitVal);
+                                }
+                            }
+                        } catch (e) {
+                            this.#log.error('Watch auto-replenish failed:', e.message);
+                        }
+                    }
+                    callback(docs);
+                }
+            }
+        };
+
+        const handleEvent = (eventPayload) => {
+            if (!initialized) {
+                queue.push(eventPayload);
+                return;
+            }
+            processEvent(eventPayload);
+        };
+
+        this.subscribe(collection, handleEvent);
+
+        this.searchProjected(collection, query, projection)
+            .then(initialDocs => {
+                if (Array.isArray(initialDocs)) {
+                    docs = initialDocs;
+                    if (sortFields.length > 0) {
+                        docs = sortDocuments(docs, sortFields);
+                    }
+                    if (limitVal > 0) {
+                        docs = docs.slice(0, limitVal);
+                    }
+                }
+                initialized = true;
+                for (const ev of queue) {
+                    processEvent(ev);
+                }
+                callback(docs);
+            })
+            .catch(err => {
+                this.#log.error('Watch initial fetch failed:', err.message);
+                initialized = true;
+                callback([]);
+            });
+
+        return {
+            close: () => {
+                const insertEvent = `${collection}:insert`;
+                const updateEvent = `${collection}:update`;
+                const deleteEvent = `${collection}:delete`;
+
+                if (this.#events[insertEvent]) {
+                    this.#events[insertEvent] = this.#events[insertEvent].filter(h => h !== handleEvent);
+                }
+                if (this.#events[updateEvent]) {
+                    this.#events[updateEvent] = this.#events[updateEvent].filter(h => h !== handleEvent);
+                }
+                if (this.#events[deleteEvent]) {
+                    this.#events[deleteEvent] = this.#events[deleteEvent].filter(h => h !== handleEvent);
+                }
+            }
+        };
     }
 
     async beginTransaction() {
@@ -663,6 +805,7 @@ class Collection {
     }
     query() { return new QueryBuilder(this.#db, this.#name); }
     helper() { return new CollectionHelper(this.#db, this.#name); }
+    watch(query, callback) { return this.#db.watch(this.#name, query, callback); }
 }
 
 module.exports = NekoDB;
