@@ -154,10 +154,11 @@ const allIds = await db.list('products');
 // Exact match
 await db.search('products', { name: 'Laptop' });
 
-// Comparison operators: $gt, $gte, $lt, $lte, $eq, $ne, $in, $nin
+// Comparison operators: $gt, $gte, $lt, $lte, $eq, $ne, $in, $nin, $regex
 await db.search('products', { price: { $gt: 500 } });
 await db.search('products', { price: { $gte: 100, $lte: 1000 } });
 await db.search('products', { category: { $in: ['electronics', 'software'] } });
+await db.search('products', { name: { $regex: '^Laptop' } });
 ```
 
 ### Vector Search
@@ -282,6 +283,11 @@ const first = await users.query()
 const results = await users.query()
     .where('role').in(['admin', 'moderator'])
     .where('status').ne('banned')
+    .exec();
+
+// Regex / Wildcard matching
+const matches = await users.query()
+    .where('email').regex('@gmail\\.com$')
     .exec();
 ```
 

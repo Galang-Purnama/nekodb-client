@@ -48,9 +48,9 @@ export class Collection {
     readonly name: string;
 
     insert(document: object): Promise<string>;
-    get(id: string): Promise<any>;
-    list(): Promise<any[]>;
-    search(query: object): Promise<any[]>;
+    get<T = any>(id: string): Promise<T>;
+    list<T = any>(): Promise<T[]>;
+    search<T = any>(query: object): Promise<T[]>;
     vectorSearch(options: VectorSearchOptions): Promise<any[]>;
     ftsSearch(options: FtsSearchOptions): Promise<any[]>;
     update(id: string, data: object): Promise<string>;
@@ -82,9 +82,9 @@ export class NekoDB {
     readonly ready: Promise<boolean>;
 
     insert(collection: string, data: object, transactionId?: string): Promise<string>;
-    get(collection: string, id: string): Promise<any>;
-    list(collection: string): Promise<any[]>;
-    search(collection: string, query: object): Promise<any[]>;
+    get<T = any>(collection: string, id: string): Promise<T>;
+    list<T = any>(collection: string): Promise<T[]>;
+    search<T = any>(collection: string, query: object): Promise<T[]>;
     vectorSearch(collection: string, options: VectorSearchOptions): Promise<any[]>;
     ftsSearch(collection: string, options: FtsSearchOptions): Promise<any[]>;
     update(collection: string, id: string, data: object, transactionId?: string): Promise<string>;
@@ -134,12 +134,43 @@ export class AuthManager {
 
 export class QueryBuilder {
     constructor(db: NekoDB, collection: string);
-    where(query: object): this;
+    where(field: string): FieldQuery;
+    eq(field: string, value: any): this;
+    gt(field: string, value: any): this;
+    gte(field: string, value: any): this;
+    lt(field: string, value: any): this;
+    lte(field: string, value: any): this;
+    ne(field: string, value: any): this;
+    in(field: string, values: any[]): this;
+    nin(field: string, values: any[]): this;
+    between(field: string, min: any, max: any): this;
+    regex(field: string, pattern: string): this;
+    select(...fields: string[]): this;
+    exclude(...fields: string[]): this;
+    sort(field: string, order?: 'asc' | 'desc'): this;
+    sortAsc(field: string): this;
+    sortDesc(field: string): this;
     limit(val: number): this;
     offset(val: number): this;
-    sort(fields: string[]): this;
-    project(projection: object): this;
-    exec(): Promise<any>;
+    page(val: number): this;
+    cursor(c: string): this;
+    exec<T = any>(): Promise<T>;
+    count(): Promise<number>;
+    first<T = any>(): Promise<T | null>;
+}
+
+export class FieldQuery {
+    constructor(builder: QueryBuilder, field: string);
+    eq(value: any): QueryBuilder;
+    gt(value: any): QueryBuilder;
+    gte(value: any): QueryBuilder;
+    lt(value: any): QueryBuilder;
+    lte(value: any): QueryBuilder;
+    ne(value: any): QueryBuilder;
+    in(values: any[]): QueryBuilder;
+    nin(values: any[]): QueryBuilder;
+    between(min: any, max: any): QueryBuilder;
+    regex(pattern: string): QueryBuilder;
 }
 
 export class Schema {
@@ -155,9 +186,9 @@ export class EventBus {
 
 export class CollectionHelper {
     constructor(db: NekoDB, collection: string);
-    find(query?: object): Promise<any[]>;
-    findOne(query: object): Promise<any | null>;
-    findById(id: string): Promise<any | null>;
+    find<T = any>(query?: object): Promise<T[]>;
+    findOne<T = any>(query: object): Promise<T | null>;
+    findById<T = any>(id: string): Promise<T | null>;
     insert(doc: object): Promise<string>;
     update(query: object, data: object): Promise<any>;
     updateById(id: string, data: object): Promise<string>;

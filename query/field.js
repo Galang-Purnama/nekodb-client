@@ -16,6 +16,7 @@ class FieldQuery {
     in(values) { return this.#builder.in(this.#field, values); }
     nin(values) { return this.#builder.nin(this.#field, values); }
     between(min, max) { return this.#builder.between(this.#field, min, max); }
+    regex(pattern) { return this.#builder.regex(this.#field, pattern); }
 }
 
 module.exports = { FieldQuery };

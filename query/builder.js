@@ -73,6 +73,11 @@ class QueryBuilder {
         return this;
     }
 
+    regex(field, pattern) {
+        this._addOp(field, '$regex', pattern);
+        return this;
+    }
+
     _addOp(field, op, value) {
         if (typeof this.#conditions[field] !== 'object' || this.#conditions[field] === null) {
             this.#conditions[field] = {};

@@ -11,6 +11,15 @@ const { CollectionHelper } = require('./helpers');
 const { ConnectionManager } = require('./connection');
 const errors = require('./errors');
 
+function unwrapDocument(doc) {
+    if (doc && typeof doc === 'object') {
+        if ('content' in doc) {
+            return doc.content;
+        }
+    }
+    return doc;
+}
+
 class NekoDB {
     #host;
     #auth;
@@ -184,7 +193,21 @@ class NekoDB {
         if (document) payload.document = document;
         if (documentId) payload.document_id = documentId;
         if (query) payload.query = query;
-        return this.#send(payload);
+        return this.#send(payload).then(result => {
+            if (typeof result === 'string') {
+                const cleaned = result.trim();
+                const err = errors.classify(cleaned);
+                if (err) {
+                    if (err instanceof errors.NotFoundError) {
+                        err.collection = collection;
+                        err.documentId = documentId;
+                        err.message = `Document not found: ${collection}/${documentId}`;
+                    }
+                    throw err;
+                }
+            }
+            return result;
+        });
     }
 
     #invalidateCacheFromEvent(collection, event, docId) {
@@ -324,8 +347,9 @@ class NekoDB {
             return Promise.resolve(cached);
         }
         return this.#request('get', collection, null, id).then(result => {
-            this.#cache.set(cacheKey, result);
-            return result;
+            const processed = unwrapDocument(result);
+            this.#cache.set(cacheKey, processed);
+            return processed;
         });
     }
 
@@ -403,7 +427,12 @@ class NekoDB {
             page: options.page || 0,
             cursor: options.cursor || '',
             sort: options.sort || [],
-        }, null, options.filter || null);
+        }, null, options.filter || null).then(result => {
+            if (result && Array.isArray(result.data)) {
+                result.data = result.data.map(unwrapDocument);
+            }
+            return result;
+        });
     }
 
     searchPaginated(collection, query, options = {}) {
@@ -411,7 +440,12 @@ class NekoDB {
             limit: options.limit || 20,
             offset: options.offset || 0,
             page: options.page || 0,
-        }, null, query);
+        }, null, query).then(result => {
+            if (result && Array.isArray(result.data)) {
+                result.data = result.data.map(unwrapDocument);
+            }
+            return result;
+        });
     }
 
     aggregate(collection, stages) {
@@ -447,11 +481,16 @@ class NekoDB {
     }
 
     getProjected(collection, id, projection) {
-        return this.#request('get-projected', collection, projection, id);
+        return this.#request('get-projected', collection, projection, id).then(unwrapDocument);
     }
 
     searchProjected(collection, query, projection) {
-        return this.#request('search-projected', collection, projection, null, query);
+        return this.#request('search-projected', collection, projection, null, query).then(results => {
+            if (Array.isArray(results)) {
+                return results.map(unwrapDocument);
+            }
+            return results;
+        });
     }
 
     createIndex(collection, field, type = 'hash') {
