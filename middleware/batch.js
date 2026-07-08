@@ -5,7 +5,7 @@ class BatchCollector {
     #timer;
     #onFlush;
 
-    constructor(onFlush, maxSize = 50, flushInterval = 3000) {
+    constructor(onFlush, maxSize = 50, flushInterval = 200) {
         this.#queue = [];
         this.#maxSize = maxSize;
         this.#flushInterval = flushInterval;
@@ -17,7 +17,10 @@ class BatchCollector {
         this.#queue.push(operation);
         if (this.#queue.length >= this.#maxSize) {
             this.flush();
-        } else if (!this.#timer) {
+        } else {
+            if (this.#timer) {
+                clearTimeout(this.#timer);
+            }
             this.#timer = setTimeout(() => this.flush(), this.#flushInterval);
         }
     }

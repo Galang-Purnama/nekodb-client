@@ -72,6 +72,41 @@ db.on('error', (err) => console.error('Error:', err));
 db.on('closed', () => console.log('Connection closed'));
 ```
 
+## L1 Cache & Real-Time Invalidation
+
+NekoDB Client has a built-in L1 Cache that speeds up read queries (`get`, `list`, `count`) by storing responses in local memory.
+
+By default, L1 cache has a TTL of 10 seconds. You can configure it when initializing the client:
+
+```javascript
+const db = new NekoDB({
+    host: 'your-server.com',
+    username: 'your_username',
+    password: 'your_password',
+    cache: {
+        ttl: 30000,      // TTL in milliseconds (default: 10000)
+        maxSize: 500     // Maximum cache size (default: 200)
+    }
+});
+```
+
+### Real-Time Invalidation via Pub/Sub
+
+When you subscribe to real-time events on a collection, NekoDB client automatically keeps your L1 cache updated. Any incoming insert, update, or delete event from the server will automatically invalidate the corresponding L1 cache entries.
+
+```javascript
+// Local L1 cache is automatically invalidated when real-time updates occur
+await db.subscribe('users', (event) => {
+    console.log('Real-time database event:', event);
+});
+```
+
+This guarantees **0 ms latency** for read operations on cache hit while keeping data perfectly fresh!
+
+## TypeScript Support
+
+NekoDB Client has built-in TypeScript definitions. Autocomplete and type checks work out-of-the-box in VS Code or any TypeScript project.
+
 ## Collection API
 
 Use `db.collection()` for a cleaner syntax:
@@ -493,20 +528,6 @@ const csvRes = await users.exportCSV('c4752fbd433b9daae49ea09a4b490f7f');
 
 // Export document to JSON (doc_id is required)
 const jsonRes = await users.exportJSON('c4752fbd433b9daae49ea09a4b490f7f');
-```
-
-## Observability and Health Checks
-
-NekoDB provides simple utility methods to programmatically retrieve database performance metrics and health status directly from the server:
-
-```javascript
-// Get database performance metrics (latencies, operations count, errors)
-const metrics = await db.getMetrics();
-console.log('Average Write Latency:', metrics.write_latency_ms);
-
-// Get server health status (uptime, storage failures, active alerts)
-const health = await db.getHealth();
-console.log('Database Status:', health.status); // e.g., "healthy"
 ```
 
 ## Pub/Sub Reactive Channels

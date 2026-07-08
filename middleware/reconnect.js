@@ -13,7 +13,8 @@ class ReconnectManager {
 
     schedule(fn) {
         if (!this.#enabled) return;
-        const wait = Math.min(this.#delay, this.#maxDelay);
+        const temp = Math.min(this.#delay, this.#maxDelay);
+        const wait = (temp / 2) + (Math.random() * (temp / 2));
         this.#timer = setTimeout(() => {
             fn();
             this.#delay = Math.min(this.#delay * 2, this.#maxDelay);

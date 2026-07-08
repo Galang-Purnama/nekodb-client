@@ -28,6 +28,7 @@ class NekoDB {
     #connected;
     #events;
     #hostClean;
+    #sendQueue;
 
     constructor({ host, username, password, cache, logging }) {
         this.#host = host;
@@ -52,6 +53,7 @@ class NekoDB {
         this.#shouldReconnect = true;
         this.#connected = false;
         this.#events = {};
+        this.#sendQueue = Promise.resolve();
 
         this.#init();
 
@@ -107,6 +109,7 @@ class NekoDB {
                         return;
                     }
                     if (parsed.event && parsed.collection) {
+                        this.#invalidateCacheFromEvent(parsed.collection, parsed.event, parsed.document_id || parsed.document?._id);
                         this.#emit(`${parsed.collection}:${parsed.event}`, parsed);
                         this.#emit('change', parsed);
                         return;
@@ -149,25 +152,30 @@ class NekoDB {
     async #send(payload) {
         await this.#ensureConnected();
 
-        this.#buffer.clear();
-        this.#ws.send(Buffer.from(JSON.stringify(payload)));
+        const result = this.#sendQueue.then(() => {
+            return new Promise((resolve, reject) => {
+                this.#buffer.clear();
+                this.#ws.send(Buffer.from(JSON.stringify(payload)));
 
-        return new Promise((resolve, reject) => {
-            const start = Date.now();
-            const poll = () => {
-                if (Date.now() - start > 30000) {
-                    reject(new Error('Request timeout'));
-                    return;
-                }
-                if (!this.#buffer.hasComplete()) {
-                    return setTimeout(poll, 5);
-                }
-                const data = this.#buffer.extract();
-                try { resolve(JSON.parse(data)); }
-                catch { resolve(data); }
-            };
-            poll();
+                const start = Date.now();
+                const poll = () => {
+                    if (Date.now() - start > 30000) {
+                        reject(new Error('Request timeout'));
+                        return;
+                    }
+                    if (!this.#buffer.hasComplete()) {
+                        return setTimeout(poll, 5);
+                    }
+                    const data = this.#buffer.extract();
+                    try { resolve(JSON.parse(data)); }
+                    catch { resolve(data); }
+                };
+                poll();
+            });
         });
+
+        this.#sendQueue = result.catch(() => {});
+        return result;
     }
 
     #request(action, collection, document, documentId, query) {
@@ -177,6 +185,25 @@ class NekoDB {
         if (documentId) payload.document_id = documentId;
         if (query) payload.query = query;
         return this.#send(payload);
+    }
+
+    #invalidateCacheFromEvent(collection, event, docId) {
+        if (event === 'insert') {
+            this.#cache.invalidatePrefix(`list:${collection}`);
+            this.#cache.invalidatePrefix(`count:${collection}`);
+        } else if (event === 'update') {
+            if (docId) {
+                this.#cache.invalidate(`get:${collection}:${docId}`);
+            }
+            this.#cache.invalidatePrefix(`list:${collection}`);
+        } else if (event === 'delete') {
+            if (docId) {
+                this.#cache.invalidate(`get:${collection}:${docId}`);
+            }
+            this.#cache.invalidatePrefix(`list:${collection}`);
+            this.#cache.invalidatePrefix(`count:${collection}`);
+        }
+        this.#log.debug(`L1 cache invalidated from real-time event: ${collection}:${event} ${docId || ''}`);
     }
 
     #httpGet(path, params) {
@@ -517,13 +544,6 @@ class NekoDB {
         }, outputPath);
     }
 
-    getMetrics() {
-        return this.#httpGet('/api/metrics', {});
-    }
-
-    getHealth() {
-        return this.#httpGet('/api/health', {});
-    }
 
     collection(name) {
         return new Collection(this, name);

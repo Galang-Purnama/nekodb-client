@@ -14,7 +14,7 @@ class ResponseCache {
             const oldest = this.#cache.keys().next().value;
             this.#cache.delete(oldest);
         }
-        this.#cache.set(key, { value, expires: Date.now() + this.#ttl });
+        this.#cache.set(key, { value: this.#clone(value), expires: Date.now() + this.#ttl });
     }
 
     get(key) {
@@ -24,7 +24,7 @@ class ResponseCache {
             this.#cache.delete(key);
             return null;
         }
-        return entry.value;
+        return this.#clone(entry.value);
     }
 
     has(key) {
@@ -45,6 +45,15 @@ class ResponseCache {
 
     clear() {
         this.#cache.clear();
+    }
+
+    #clone(val) {
+        if (val === null || typeof val !== 'object') return val;
+        try {
+            return JSON.parse(JSON.stringify(val));
+        } catch {
+            return val;
+        }
     }
 
     get size() {
