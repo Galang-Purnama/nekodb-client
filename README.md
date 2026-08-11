@@ -134,6 +134,11 @@ const docId = await db.insert('products', {
     price: 999,
     tags: ['electronics', 'computers'],
 });
+
+// Insert document with TTL (Time-To-Live in seconds)
+const sessionDocId = await db.insertTTL('sessions', { token: 'secret123' }, 3600);
+// or using options object:
+await db.insert('sessions', { token: 'secret123' }, { ttl: 3600 });
 ```
 
 ### Get

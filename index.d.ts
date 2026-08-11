@@ -43,11 +43,19 @@ export interface BulkExecuteOptions {
     stopOnError?: boolean;
 }
 
+export interface InsertOptions {
+    transactionId?: string;
+    transaction_id?: string;
+    ttl?: number;
+    _ttl?: number;
+}
+
 export class Collection {
     constructor(db: NekoDB, name: string);
     readonly name: string;
 
-    insert(document: object): Promise<string>;
+    insert(document: object, optionsOrTxId?: string | InsertOptions): Promise<string>;
+    insertTTL(document: object, ttlSeconds: number, transactionId?: string): Promise<string>;
     get<T = any>(id: string): Promise<T>;
     list<T = any>(): Promise<T[]>;
     search<T = any>(query: object): Promise<T[]>;
@@ -82,7 +90,8 @@ export class NekoDB {
     readonly connected: boolean;
     readonly ready: Promise<boolean>;
 
-    insert(collection: string, data: object, transactionId?: string): Promise<string>;
+    insert(collection: string, data: object, optionsOrTxId?: string | InsertOptions): Promise<string>;
+    insertTTL(collection: string, data: object, ttlSeconds: number, transactionId?: string): Promise<string>;
     get<T = any>(collection: string, id: string): Promise<T>;
     list<T = any>(collection: string): Promise<T[]>;
     search<T = any>(collection: string, query: object): Promise<T[]>;

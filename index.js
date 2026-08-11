@@ -325,12 +325,25 @@ class NekoDB {
     get connected() { return this.#connected; }
     get ready() { return this.#connectedPromise; }
 
-    insert(collection, data, transactionId) {
+    insert(collection, data, optionsOrTxId) {
         this.#cache.invalidatePrefix(`list:${collection}`);
         this.#cache.invalidatePrefix(`count:${collection}`);
         this.#log.debug('insert', collection);
-        const query = transactionId ? { transaction_id: transactionId } : null;
+        let query = null;
+        if (typeof optionsOrTxId === 'string') {
+            query = { transaction_id: optionsOrTxId };
+        } else if (optionsOrTxId && typeof optionsOrTxId === 'object') {
+            query = {};
+            if (optionsOrTxId.transactionId) query.transaction_id = optionsOrTxId.transactionId;
+            if (optionsOrTxId.transaction_id) query.transaction_id = optionsOrTxId.transaction_id;
+            if (optionsOrTxId.ttl) query.ttl = optionsOrTxId.ttl;
+            if (optionsOrTxId._ttl) query._ttl = optionsOrTxId._ttl;
+        }
         return this.#request('insert', collection, data, null, query);
+    }
+
+    insertTTL(collection, data, ttlSeconds, transactionId) {
+        return this.insert(collection, data, { ttl: ttlSeconds, transactionId });
     }
 
     get(collection, id) {
@@ -772,7 +785,8 @@ class Collection {
 
     get name() { return this.#name; }
 
-    insert(document) { return this.#db.insert(this.#name, document); }
+    insert(document, optionsOrTxId) { return this.#db.insert(this.#name, document, optionsOrTxId); }
+    insertTTL(document, ttlSeconds, transactionId) { return this.#db.insertTTL(this.#name, document, ttlSeconds, transactionId); }
     get(id) { return this.#db.get(this.#name, id); }
     list() { return this.#db.list(this.#name); }
     search(query) { return this.#db.search(this.#name, query); }
